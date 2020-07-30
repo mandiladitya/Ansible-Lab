@@ -1,0 +1,120 @@
+---
+- name: ovirt cloud
+  hosts: ovirt
+  gather_facts: no
+  tasks:
+   - name: Obtain SSO token with using username/password credentials
+     ovirt_auth:
+      url: https://rhvm.example.com/ovirt-engine/api
+      username: admin@internal
+      ca_file: /etc/pki/ovirt-engine/ca.pem
+      password: redhat
+
+   - name: Create datacenter
+     ovirt_datacenter:
+      auth: "{{ ovirt_auth }}"
+      name: mydatacenter2
+      description: "Aisa Mumbai"
+      local: False
+      compatibility_version: "4.3"
+      quota_mode: enabled
+      comment: "Testing"
+      state: present
+
+   - name: Create cluster
+     ovirt_cluster:
+      auth: "{{ ovirt_auth }}"
+      data_center: mydatacenter2
+      name: mycluster2
+      description: mycluster
+      comment: "cluster"
+      cpu_arch: x86_64
+      cpu_type: Intel Nehalem Family
+      compatibility_version: "4.3"
+      switch_type: legacy
+      firewall_type: firewalld
+      external_network_providers:
+        - name: ovirt-provider-ovn
+
+   - name: Add host
+     ovirt_host:
+      auth: "{{ ovirt_auth }}"
+      cluster: mycluster
+      name: host2
+      comment: host managed by ansible
+      address: 192.168.122.97
+      password: redhat
+
+
+   - name:  Add data NFS storage domain
+     ovirt_storage_domain:
+      auth: "{{ ovirt_auth }}"
+      data_center: mydatacenter
+      name: data_nfs
+      domain_function: data
+      description: Data_Domain
+      comment: Master_Domain
+      host: host2
+      nfs:
+        address: 192.168.122.98
+        path: /domains/data
+        mount_options: noexec,nosuid
+
+   - name:  Add ISO  domain
+     ovirt_storage_domain:
+      auth: "{{ ovirt_auth }}"
+      data_center: mydatacenter
+      name: iso_domain
+      domain_function: iso
+      description: iso_Domain
+      comment: os_images
+      host: host2
+      nfs:
+        address: 192.168.122.98
+        path: /domains/iso
+
+
+   - name:  Create a new disk
+     ovirt_disk:
+      auth: "{{ ovirt_auth }}"
+      name: vm1_disk
+      size: 4GiB
+      wait: true
+      format: cow
+      bootable: true
+      interface: virtio
+      storage_domain: data_nfs
+
+   - name:  Creates a new server rhel7 Virtual Machine from Blank template
+     ovirt_vm:
+      auth: "{{ ovirt_auth }}"
+      state: present
+      cluster: mycluster
+      name: vm1
+      memory: 4GiB
+      cpu_cores: 1
+      cpu_sockets: 1
+      type: server
+      operating_system: rhel_7x64
+      disks:
+        - name: vm1_disk
+          bootable: True
+      nics:
+       - name: nic1
+         interface: virtio
+         mac_address: 52:54:00:e2:37:5a
+      stateless: no
+
+   - name: Boot VM from CD
+     ovirt_vm:
+      auth: "{{ ovirt_auth }}"
+      name: vm1
+      cd_iso: minimal_linux_live_15-Dec-2019_64-bit_bios.iso
+      boot_devices:
+       - cdrom
+
+   - name: start vm 
+     ovirt_vm:
+      auth: "{{ ovirt_auth }}"
+      name: vm1
+      state: running

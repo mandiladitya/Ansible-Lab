@@ -1,0 +1,28 @@
+Windows System
+===============================================
+lab setup windowws
+https://github.com/ansible/ansible/tree/devel/examples/scripts/ConfigureRemotingForAnsible.ps1
+RUN
+./ConfigureRemotingForAnsible.ps1
+-----------------------------------------------------------------------------------------
+control node
+yum install epel-relese 
+yum install -y ansible
+yum install python2-pip
+pip install pywinrm
+
+#vim inventory
+[production]
+192.168.122.200
+
+[production:vars]
+ansible_user=Administrator
+ansible_password=A198SAM321
+ansible_connection=winrm
+ansible_winrm_server_cert_validation=ignore
+
+#ansible production -i inventory -m win_ping
+
+#vim ansible.cfg
+[defaults]
+inventory  = ./inventory

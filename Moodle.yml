@@ -1,0 +1,163 @@
+---
+- name: Install requeriments
+  hosts : production
+  gather_facts: true
+  become: true
+  vars:
+    mysql_root_password: 'Redhat@123'
+  tasks:
+    - name: installng  repos
+      yum:
+        name:
+          - https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+          - http://rpms.remirepo.net/enterprise/remi-release-7.rpm
+        state: latest
+
+    - name: installing important packages
+      yum:
+        name:
+          - epel-release
+          - yum-utils
+          - policycoreutils-python-2.5-34.el7.x86_64
+          - mariadb-server
+          - python36-PyMySQL
+          - python-PyMySQL
+          - httpd
+          - mod_ssl
+          - unzip
+          - wget
+          - python3-PyMySQL
+        state: latest
+
+    - name: enabling remi repo
+      shell: yum-config-manager --enable remi-php72
+
+    - name: installing php and its components
+      yum:
+        name:
+          - php
+          - php-common
+          - php-intl
+          - php-zip
+          - php-soap
+          - php-xmlrpc
+          - php-opcache
+          - php-mbstring
+          - php-gd
+          - php-curl
+          - php-xml
+          - php-mysqlnd
+          - php-json
+        state: latest
+
+    - name: starting  mariadb service
+      service:
+        name: mariadb
+        state: started
+        enabled: true
+
+    - name: enabling port https
+      firewalld:
+        service: https
+        permanent: yes
+        state: enabled
+
+    - name: enabling port http
+      firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+
+    - name: reload service firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+
+    - name: starting httpd service
+      service:
+        name: httpd
+        state: started
+        enabled: true
+
+    - name: set root password mariadb
+      mysql_user:
+        check_implicit_admin: true
+        login_user: root
+        login_password: "{{mysql_root_password}}"
+        user: root
+        password: "{{mysql_root_password}}"
+        host: all
+
+    - name: Removes all anonymous user accounts
+      mysql_user:
+        name: ''
+        host_all: yes
+        state: absent
+
+    - name: Disallow root login
+      mysql_user:
+        check_implicit_admin: true
+        login_user: root
+        login_password: "{{mysql_root_password}}"
+        user: root
+        host: "{{ansible_fqdn}}"
+        state: absent
+
+    - name: Delete database with name 'test'
+      mysql_db:
+        name: test
+        state: absent
+
+    - name: create database with name 'moodledata'
+      mysql_db:
+        name: moodledata
+        state: present
+
+    - name: Create database user with password and all database privileges and 'WITH GRANT OPTION'
+      mysql_user:
+        name: moodle
+        password: "{{mysql_root_password}}"
+        priv: '*.*:ALL,GRANT'
+        state: present
+
+    - name: Revoke all privileges for user 'moodle'
+      mysql_user:
+        name: moodle
+        password: "{{mysql_root_password}}"
+        priv: "*.*:USAGE"
+        state: present
+
+    - name: Download moodle
+      get_url:
+        url: https://download.moodle.org/stable38/moodle-latest-38.tgz
+        dest: /root
+        mode: '0770'
+
+    - name: Unarchive moodle that is already on the remote machine
+      unarchive:
+        src: /root/moodle-latest-38.tgz
+        dest: /root
+        remote_src: yes
+    - name: Move moodle files
+      shell: mv -f /root/moodle/* /var/www/html/
+
+    - name: Create data directory if it does not exist
+      file:
+        path: /var/www/data
+        state: directory
+        mode: '0777'
+
+    - name: Allow apache to modify files in /var/www/data(/.*)?
+      sefcontext:
+        target: '/var/www/data(/.*)?'
+        setype: httpd_sys_content_rw_t
+        state: present
+
+    - name: Apply new SELinux file context to filesystem
+      command: restorecon -irvF  /var/www/
+      
+   - name: starting services
+      service:
+        name: httpd
+        state: restarted
+        enabled: true
